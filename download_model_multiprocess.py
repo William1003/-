@@ -1,5 +1,4 @@
 import multiprocessing
-
 from selenium import webdriver
 import json
 from selenium.webdriver.chrome.options import Options
@@ -40,7 +39,6 @@ def download(project_url, port):
     if not li_list:
         logger.warning('Can not download Project {}'.format(project_id))
         available_port[port] = True
-        exit(0)
 
     for li in li_list:
         assetId = li.get_attribute('data-id')
@@ -53,7 +51,6 @@ def download(project_url, port):
         if not assetId or not assetProjectId or not assetTitle or not assetToken or not assetUrl or not assetIsWipModel or not assetWipModelDownloadUrl:
             logger.warning('Can not download Project {}'.format(project_id))
             available_port[port] = True
-            exit(0)
         download_url = 'https://gallery.autodesk.com/downloads/downModelFile?assetId={}&assetProjectId={}&assetTitle={}' \
                            '&assetToken={}&assetUrl={}&assetIsWipModel={}&assetWipModelDownloadUrl={}'.format(assetId, assetProjectId,
                                                                                                             assetTitle, assetToken, assetUrl, assetIsWipModel, assetWipModelDownloadUrl)
@@ -85,4 +82,5 @@ if __name__ == '__main__':
                 port = key
                 break
         pool.apply_async(download, args=(project_url, port, ))
-
+    pool.close()
+    pool.join()
