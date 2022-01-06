@@ -1,27 +1,75 @@
-import json
-import requests
-from requests_html import HTMLSession
 from selenium import webdriver
+import json
+from selenium.webdriver.chrome.options import Options
+import logging
+import requests
+from tqdm import tqdm
 
-browser = webdriver.Chrome()
+logger = logging.getLogger('logger')
+logger.setLevel(logging.DEBUG)
+fmt = logging.Formatter(fmt="%(asctime)s - %(levelname)-9s - %(filename)-8s : %(lineno)s line - %(message)s")
+sh = logging.StreamHandler()
+sh.setLevel(logging.DEBUG)
+sh.setFormatter(fmt)
+logger.addHandler(sh)
+logfile = 'log/get_download_url.log'
+fh = logging.FileHandler(logfile, mode='a')
+fh.setLevel(logging.DEBUG)
+fh.setFormatter(fmt)
+logger.addHandler(fh)
+
+options = Options()
+options.add_experimental_option("debuggerAddress", "127.0.0.1:9527")
+browser = webdriver.Chrome(options=options)
 json_file_name = 'data/test_id_slug.json'
-with open(json_file_name, 'r') as f:
-    id_slug_dict = json.load(f)
-headers = {
-    'cookie': 'adsk_ccpa_guid=814229da-6cd0-4623-9775-8829df8f88f8; OPTOUTMULTI_REF=f74cdea6-5e9c-4e93-b4af-09dd1c41c690; OPTOUTMULTI_TYPE=P; _cs_c=1; s_ecid=MCMID|60531758190183886764242739456195341110; WRUIDCD20200731=3380776889074615; _mkto_trk=id:918-FOD-433&token:_mch-autodesk.com-1626416748658-91829; __qca=P0-1603605256-1626416728722; _fbp=fb.1.1626416749227.2102680332; s_fid=65E045774988C4B2-3BF39E5DA4A183B1; userty.core.p.8317ef=__2VySWQiOiI1ZDExZWI1NjU5M2MwNmQxMzc5ZjdmZWExYTA5MDZhMyJ9eyJ1c; _ga=GA1.2.1833606427.1626855912; adsk_top_plc=1_fusion-360|; _uetvid=686ca8c0e5fe11ebbbcdcb8b90da8b5c; _cs_id=6deba64d-c6fa-a26a-9abb-9239fbabbb46.1626416641.6.1627538798.1627538421.1617524517.1660580641477.Lax.0; __CT_Data=gpv=12&ckp=cd&dm=autodesk.com&apv_60_www33=13&cpv_60_www33=12&rpv_60_www33=12; neon_lng=zh-Hans; _ga=GA1.3.1833606427.1626855912; mbox=PC#c1d0427f935c4c99998eca29e036d007.32_0#1702632140|session#c0441c2f98f747c489d4b4630a45489a#1639389200; AMCVS_6DC7655351E5696B0A490D44@AdobeOrg=1; _sp_id.cd78=d7e79339-0684-47cc-b097-7ebb4343739d.1626416641.84.1641288011.1639387650.bab411f4-546b-4a0e-8c13-73b3de71ee8b; cl-token=Skdo/BMVqlSxIxBqizA9BJoMHrilWCDrv6QgXqK4L3LvGP8GRc+kGg5kszpq5E6GSkwpCV68M1RPljMAZkDOEw==; cl-flags=cl-kmsi-enabled:1|cl-token-enabled:1; identity-sso=GP54JWJ8DHUU; s_dlv=1641288025943; s_vnum=1657952726605&vn=61; AMCV_6DC7655351E5696B0A490D44@AdobeOrg=1585540135|MCIDTS|18997|MCMID|60531758190183886764242739456195341110|MCAID|NONE|MCOPTOUT-1641295226s|NONE|MCAAMLH-1641892826|11|MCAAMB-1641892826|j8Odv6LonN4r3an7LhD3WZrU1bUpAkFkkiY1ncBR96t2PTI|MCSYNCSOP|411-18976|vVersion|4.4.0|MCCIDH|-1968766871; s_cc=true; gallery_sso_synergy=72c0943e-b917-4fca-a142-6d3c34963d9a; gallery_fe_session=8221da89e17b5f645e5b448a52d70f43; _gid=GA1.2.433562483.1641288105; _gid=GA1.3.433562483.1641288105; _gat=1; _gat_UA-7938776-36=1; AKN_UP_micro-prd=R1A1NEpXSjhESFVVOmE4NjZjOWZjNTYwNGIwYTRkNTI1ODliZDIzYTZmYzhj; AWSALB=d5yyMLT7lNBf6t26QtIE2PY0sq/HINb4HF9FxSwBb5mBDUHx2LFP9YXbUp8eCBeH521ganBri3WoXH8ztK/9vNm0W/gYqMgoyEpC+7r53ujnkuLn1vGCamTaVl4V; AWSALBCORS=d5yyMLT7lNBf6t26QtIE2PY0sq/HINb4HF9FxSwBb5mBDUHx2LFP9YXbUp8eCBeH521ganBri3WoXH8ztK/9vNm0W/gYqMgoyEpC+7r53ujnkuLn1vGCamTaVl4V; _exchange_gallery_session=UW5YeDFiVWZ0azlKZ3VCVlpQajNVY0NEbXNuYWY3M0REZ0pUZWxsRWpSVHVwcmhRUXlDb3JVOWdNSlV2RWZqTFdSQ2JlWVN5dHJYbWpab3gzYTNGZWZmYTR6L0w3SnNvSG5nQmtCejhpR0FIcHA0YmlpbGFTMXNhL2VLS0I0a2NnaWNkVzhCYVV2TExZc0xxaFp2WTNTSUNLenNQUE9kUzN4ZjdUeXFvODFYcHE3UUZIdktPbVBHbGFrN2xRZWxRZHZ4SWM4RDlDamNSbUU4YmY5QS93RjU0RXZmRGM5WjZoeHduSHQxczYxdEF5ZVBDeTNha1NaWTVTaGdtNExKYU53VGZ5N1BhSFVjdmF5SkFGbFRiNGR2Tlhzd1J2eFEwaHpReTFBQ2NFQWN2VnJzZ2pCNGc2Q290RTdsS1NEdnZXa0c0VzY2VDRqTW1idy92MHV4Y2RhZE5ramdla3BKU2lMblNadnJxYkRHeHhUc3JqbTlRaHFqcm5QT2d2Tnk4UHFyMS9yR2ZqN3MzdVVlTVNRU3pyN3gxd3pOcVF6dVNHMTJPWkJCZzhtTlNZRjV0MTFUZlhXWXhVOVJTL2E1WHpleTZ1Z3VPS3FpRFYxbXVlMjAxQ1FvdDdtY2pyOFdHUWpwSHBLSSszSkhsNCtjTEVPclVOcG4yd2c4ZklKS3lCSythY1Q5VFUrdEVTK0JDNC81c1Y4bVlZYzc5TW1zbCtzS0ZyYjF3RGFNaWk5WlQ5Z3dxaCs4TE1TTjdBTnAwSC9wdWZFN1B5Q2w5cFFuSjhQVldhckl4djlVRyt3eEw2Um93aFZ1V1B4TUJqcm5XL09zaEZUOVlzSk1YYU1wWmZadzRpdmNXY0lHSkpTMGJvR0NHOEoyYUNuMUlVM3JrbW8zNnJxOTZaZW9ZY3JhSGE5dXAzZ1VvUWpvM0dxN3J2RFZpUU1PTmFMa3U3eUhjVk1zU2luTjNkamZRYWJYUkIwVDRVOVBiaityNlRGRGlnbGNmbGpDVXBINDFHeDh0N3FOS2ExUDM4REtobFdtS1RDSUlzN3Nic0hxWFI0dm5IZGxVY1ZGdkhMUTFINFZqRzRrMGFGc1ZVOEtXWmpZYVcweUdCNDlBMEJRSDZaK0VObWYybHN3QURLZU1kWTdZNUxIWHhnQmtLaU1zd3FOMnRGL2Q4OElsR0k5anJPdEowSTg1a1l6MXplMjZHbjMvUHZNNFV3PT0tLTdaeTVGdmhveml1VVZlTkdDaUJCVFE9PQ==--fff759e95a30ef72d18ead81d5915ceef83dd030; OPTOUTMULTI=0:0|c9:0|c1:0|c8:0|c7:0; ADSK_GDPR_OPT_LENGTH=Fri, 04 Feb 2022 06:43:32 GMT; utag_main=v_id:017aadedf45e00024c99b2febc0d03083005b07b00bd0$_sn:53$_ss:0$_st:1641366812695$vapi_domain:autodesk.com$optoutbackup:undefined;exp-1642061579703$ses_id:1641364991182;exp-session$_pn:2;exp-session'
-}
-for key, value in id_slug_dict.items():
-    page_url = 'https://gallery.autodesk.com/projects/' + key + '/' + value + '?searched='
+with open('data/project_url.json', 'r', encoding='utf-8') as f:
+    project_urls = json.load(f)
 
-    browser.get(page_url)
-    cookie = {'name': '_exchange_gallery_session',
-        'value': 'neon_lng=zh-Hans; OPTOUTMULTI_REF=8dd58207-b4f2-4e6c-a9c8-a5caf2c49fe3; OPTOUTMULTI_TYPE=P; AMCVS_6DC7655351E5696B0A490D44@AdobeOrg=1; _sp_id.cd78=a9904000-91ef-4549-8c0b-a5e63f591e00.1641366539.1.1641366539.1641366539.1fd168ef-bf3c-4a80-9176-b22b038eaf32; _sp_ses.cd78=*; s_ecid=MCMID|26455643364368153893179751514984032531; cl-token=Skdo/BMVqlSxIxBqizA9BJoMHrilWCDrv6QgXqK4L3JCThUzOBF4lmDqM/ry5U/Ukk6VPHobCFiujBv7Z4VnoA==; cl-flags=cl-kmsi-enabled:1|cl-token-enabled:1; identity-sso=GP54JWJ8DHUU; s_dfa=autodesk-new-gl; s_dlv=1641366554057; s_dlv_s=First Visit; s_vnum=1672902554057&vn=1; s_invisit=true; AMCV_6DC7655351E5696B0A490D44@AdobeOrg=1585540135|MCIDTS|18998|vVersion|4.4.0|MCMID|26455643364368153893179751514984032531|MCAAMLH-1641971354|11|MCAAMB-1641971354|RKhpRz8krg2tLO6pguXWp5olkAcUniQYPHaMWWgdJ3xzPWQmdj0y|MCOPTOUT-1641373754s|NONE|MCAID|NONE|MCSYNCSOP|411-19005|MCCIDH|-1968766871; s_cc=true; gallery_sso_synergy=c41bef74-e957-4883-868f-59e23457cdb7; AKN_UP_micro-prd=R1A1NEpXSjhESFVVOjFiMmNmOTk1N2IxZTk0ZjllMGIxNTMyMGVkYzhjZWQ4; ADSK_GDPR_OPT_LENGTH=Fri, 04 Feb 2022 07:09:31 GMT; OPTOUTMULTI=0:0|c9:0|c1:0|c8:0|c7:0; utag_main=v_id:017e290951d3001880c1fa8514db05073005006b00bd0$_sn:1$_ss:0$_st:1641368390358$ses_id:1641365983700;exp-session$_pn:6;exp-session$optoutbackup:undefined;exp-1649141985506$vapi_domain:autodesk.com'}
-    browser.add_cookie(cookie_dict=cookie)
-    browser.get(page_url)
-    li = browser.find_element_by_class_name('file-item')
-    print(li.text)
+download_urls = dict()
+
+headers = {'cookie': 'neon_lng=zh-Hans; adsk_ccpa_guid=1b1dead1-9e26-4967-bab6-5e9c87523310; AMCVS_6DC7655351E5696B0A490D44@AdobeOrg=1; OPTOUTMULTI_REF=6bc8aedb-3f88-4f75-a40d-9aad00914c24; OPTOUTMULTI_TYPE=P; s_ecid=MCMID|81385808566981209830170501947158096701; s_ppvl=oxygen%3Aauthentication%3Alogon%3Alogin%20failed,100,197,1007,1920,1007,1920,1080,1,P; s_ppv=oxygen%3Aauthentication%3Alogon%3Alogin%20failed,100,100,1007,1920,1007,1920,1080,1,P; s_vnum=1672912062301&vn=1; s_cc=true; _sp_id.cd78=b6616605-aaf8-446d-9a67-f2635ab4cdfe.1641376059.1.1641376064.1641376059.18dbf825-620a-4714-8025-c84e51c10d9f; cl-token=Skdo/BMVqlSxIxBqizA9BJoMHrilWCDrv6QgXqK4L3JCThUzOBF4lmDqM/ry5U/UV0p1zXaO3chCD6674guHXw==; cl-flags=cl-kmsi-enabled:1|cl-token-enabled:1; identity-sso=GP54JWJ8DHUU; s_dlv=1641376064502; AMCV_6DC7655351E5696B0A490D44@AdobeOrg=1585540135|MCIDTS|18998|MCMID|81385808566981209830170501947158096701|MCAAMLH-1641980864|11|MCAAMB-1641980864|RKhpRz8krg2tLO6pguXWp5olkAcUniQYPHaMWWgdJ3xzPWQmdj0y|MCOPTOUT-1641383264s|NONE|MCAID|NONE|MCSYNCSOP|411-19005|MCCIDH|-1968766871|vVersion|4.4.0; _ga=GA1.3.1148096373.1641390455; _gid=GA1.3.404872968.1641390455; _ga=GA1.2.1148096373.1641390455; _gid=GA1.2.404872968.1641390455; gallery_sso_synergy=eff60bb0-5f19-4a2b-94f0-0144d1e1e10d; gallery_fe_session=bfcefe5b82aaf561dd020ecca0ae140a; AKN_UP_micro-prd=R1A1NEpXSjhESFVVOjFjZGVkYzA2N2Y5YmZiNDAwNzBjMjgzMzdiNzBkYzkx; AWSALB=5oowORoba+3ARFYU+j0ZMXWRKVYIDWt74PyHdMjyluKevdE/isWedZzaYeW9DSypmEdL8btcPbfg2HBnjLwVMQgGWEXUaEPXGXzrRSyXVyyqBjkwU8HrC2L6ut6e; AWSALBCORS=5oowORoba+3ARFYU+j0ZMXWRKVYIDWt74PyHdMjyluKevdE/isWedZzaYeW9DSypmEdL8btcPbfg2HBnjLwVMQgGWEXUaEPXGXzrRSyXVyyqBjkwU8HrC2L6ut6e; _exchange_gallery_session=WVpIQ3E3K1JCV0J2NThLTlFZdVE3L0RnTmhqYmhtMmpTSTJuR0JPYnlEVGcvOWMxaEZJSVhiNjVsZ1RadnczVmZ6Q3JYRFlybXlNdXhkOFZ5TlZFUmJoUGREWXpmNytwVEJjeGxlL0RrQlVkTFJFZkNoNyt1T3hPMnZQd1MrbHFwSnlGeEp6aG5Tczc5OURLbXRZSER2dFphWDVLYnNqQVFraDVNdXJBb3FLTG5uYTA0djlYWlhyaVZmUGNUSksxU0R3Y05oWXh5NkZZKzlLS1hETVQzdUo0ckxwMHZUZG9OTXdHOEdvZ0xaWExrdU8wZWFVWmM2Zi9kTGhxR0ZQcHNnUTZRUVBLczhSQnhqUHhVRUdUY3JrZFBtbTh4a3hvUlQwQ2t1SjA2RnBvaU1uZnM3VE4yQ2xHWERjZFV5RzJKTHQrM3NLVEluZDFnTWJlUWRmK0dtS3JtckpuQUl0WlZyR25qeGd0a1ZrdkZreEE1dnplbFk2cFloazJrakd6Qmo1V0dDdUx0Q2hIbEJJQjRpWjBKczc4ZVFsYTNBeTNYRDNQQ2t5My8zRGVDbURsUmt1RlZNZDFCQVZscjVtU1hiOXdvclJqM1NGQ09GV215RkR0aWVDOE9tSFFsaExKQjFuMjQ2WFBJZkpwc1BHMzVOYVhoY3duNWtLWWhxN1A0eUZtUFByWWNHeUVuQm1NcWdQaVBleUpHczl0UE5XMVN4YTlNc2JwamQ5Uy9HdDB0STYvYjBDM3JRM1d2Z1JzQTBCVERYSDdISU40K0xPaUVSdHVqRXNjemtEWEd0bGZWYlZUQ0kxQ3FXQXNEcnFiY1dCUmZvcEQ1Z3ZRUFhVUUgxWXNwSnpPU1dlUGJmT2o1dHZvalNoNTZIVUYzeUZSNGtBRktjQlpHaW80TjFhV200UlE0ZVdxbDRUbk9HbWVpUElGL2ZUSmQ0aUNkWC9xY054cDE3dUZldzRlN2xybm9jaDhLQVJxQjdVSDNkZGJXbW5zYzdNZE96aE9HTVphUnpqMll1UndETDh5TEZ3YnE3RG43L1UrNWF0b1ZZNkpJbCt2NjVEeHRBaTIyeXpWY0FNTEZZSG54dkZTRmE1WXc2aUlPSHdvNUFLcHZybWFkSEZEVUtlUS93aDg0eVdxNzhTQTAyTVlTM0dwWlBqQWRRTlIyVVU4bXgvang2aG4tLTN2QWlyMlFsQ3dHY2t4dEI1eklZOEE9PQ==--4881192e43e4fa107cdf3e64c08abefcb4bd82e7; _gat_UA-7938776-36=1; OPTOUTMULTI=0:0|c9:0|c1:0|c8:0|c7:0; ADSK_GDPR_OPT_LENGTH=Sat, 05 Feb 2022 02:49:05 GMT; utag_main=v_id:017e29a246c80002970df438038105073005006b00bd0$_sn:5$_ss:0$_st:1641439145499$vapi_domain:autodesk.com$optoutbackup:undefined;exp-1649152051497$ses_id:1641435130777;exp-session$_pn:24;exp-session; _gat=1',
+           'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36'}
+for project_url in tqdm(project_urls):
+    project_id = project_url.split('/')[4]
+    url_list = []
+    browser.get(project_url)
+    try:
+        li_list = browser.find_elements_by_class_name('file-item')
+    except Exception:
+        logger.warning('Project {}, can not get download url'.format(project_id))
+        continue
+
+    for li in li_list:
+        assetId = li.get_attribute('data-id')
+        assetProjectId = li.get_attribute('data-project_id')
+        assetTitle = li.get_attribute('data-file-name')
+        assetToken = li.get_attribute('data-token')
+        assetUrl = li.get_attribute('data-asset-url')
+        assetIsWipModel = li.get_attribute('data-is-wip-model')
+        assetWipModelDownloadUrl = li.get_attribute('data-wip-model-download-url')
+        download_url = 'https://gallery.autodesk.com/downloads/downModelFile?assetId={}&assetProjectId={}&assetTitle={}' \
+                           '&assetToken={}&assetUrl={}&assetIsWipModel={}&assetWipModelDownloadUrl={}'.format(assetId, assetProjectId,
+                                                                                                            assetTitle, assetToken, assetUrl, assetIsWipModel, assetWipModelDownloadUrl)
+        if download_url:
+            url_list.append(download_url)
+            r = requests.get(download_url, headers=headers, stream=True)
+            if r.status_code == 200:
+                with open('models/' + assetTitle, 'wb') as f:
+                    f.write(r.content)
+                logger.info('Successfully download Project {}'.format(project_id))
+            else:
+                logger.warning('Can not download Project {}'.format(project_id))
+    download_urls[project_id] = url_list
+
+
+    logger.info('Project {}, successfully get download url'.format(project_id))
+    logger.info('{} download urls have got'.format(len(download_urls)))
+    with open('data/download_urls.json', 'a', encoding='utf-8') as f:
+        json.dump(download_urls, f)
+        f.close()
+
     # session = HTMLSession()
     # respond = session.get(page_url, headers=headers)
     # print(respond.html.render())
     # session.close()
-    break
+
